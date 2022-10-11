@@ -1,12 +1,13 @@
-#include "stack_functions.h" //ALARMALARMALARMALARMALARMALARMALARMALARMALARMALARMALARM
+#include "stack_functions.h" 
 
 stack_t *stack_new()
 {
     stack_t *stack = (stack_t*)calloc(1, sizeof(stack_t));
 
-    assert(stack != nullptr);
-
-    stack_dump(stack, __FUNCTION__, __LINE__);
+    if(stack == nullptr)
+    {
+        stack->error = failed_to_create_stack;
+    }
 
     return stack;
 }
@@ -17,40 +18,45 @@ void stack_push(stack_t *stack, STACK_TYPE num)
 
     if(stack->capacity == 0)
     {
-        stack->capacity = 1; //ALARMALARMALARMALARMALARMALARMALARMALARMALARMALARMALARM
+        stack->capacity = 1; 
         stack->data = (STACK_TYPE*)calloc(3, sizeof(STACK_TYPE));
-        assert(stack->data != nullptr);
+
+        if(stack->data == nullptr)
+        {
+            stack->error = failed_to_increase_stack;
+        }
 
         stack->data[0] = DETECTOR;
         stack->data[1] = DETECTOR;
     }  
 
+
     stack_check(stack);
 
-    if(stack->size == stack->capacity) //ALARMALARMALARMALARMALARMALARMALARMALARMALARMALARMALARM
+
+    if(stack->size == stack->capacity) 
     {
-        stack->capacity = stack->capacity * 2;  //ALARMALARMALARMALARMALARMALARMALARMALARMALARMALARMALARM
+        stack->capacity = stack->capacity * 2;  
         stack->data = (STACK_TYPE*)realloc(stack->data, (stack->capacity + 2) * sizeof(STACK_TYPE));
-        assert(stack->data != nullptr); 
+        
+        if(stack->data == nullptr)
+        {
+            stack->error = failed_to_increase_stack;
+        }  
     }
-
-    assert(stack->hash == get_data_hash(stack));    
-
-    stack->data[stack->size + 1] = num;
-    stack->data[stack->size + 2] = DETECTOR;
 
     stack->size++;
 
+    stack->data[stack->size] = num;
+    stack->data[stack->size + 1] = DETECTOR;
+
     stack->hash += get_hash((HASH_TYPE) stack->data[stack->size]);
-    // stack->hash = get_data_hash(stack);
 
     stack_dump(stack, __FUNCTION__, __LINE__);
 }
 
 STACK_TYPE stack_pop(stack_t *stack)
 {
-    stack_dump(stack, __FUNCTION__, __LINE__);
-    
     stack_check(stack);
 
     STACK_TYPE temp = 0;
@@ -59,7 +65,11 @@ STACK_TYPE stack_pop(stack_t *stack)
     {
         stack->capacity = stack->capacity / 2;
         stack->data = (STACK_TYPE*)realloc(stack->data, (stack->capacity + 2) * sizeof(STACK_TYPE));
-        assert(stack->data != nullptr);
+        
+        if(stack->data == nullptr)
+        {
+            stack->error = failed_to_decrease_stack;
+        }
     }
 
     temp = stack->data[stack->size];
@@ -71,48 +81,57 @@ STACK_TYPE stack_pop(stack_t *stack)
 
     stack_dump(stack, __FUNCTION__, __LINE__);
 
+    stack->hash -= get_hash((HASH_TYPE) temp);
+
+    stack_dump(stack, __FUNCTION__, __LINE__);
+
     return temp;
 }
 
-void stack_dump(stack_t *stack, const char *func_name, int line) //ПОЧЕМУ НЕ ВЫВОДИТ STACK_NEW В ФАЙЛ
+void stack_dump(stack_t *stack, const char *func_name, int line) 
 {
-    // printf(                  "In func %s, line %d\nsize = %zu, capacity = %zu\n", func_name, line, stack->size, stack->capacity);
     fprintf(stack->log_file, "In func %s, line %d\nsize = %zu, capacity = %zu\n", func_name, line, stack->size, stack->capacity);
 
     if(stack->data != nullptr)
     {
         for(size_t i = 0; i < stack->size + 2; i++)
         {
-            // printf("%d ", stack->data[i]);
             fprintf(stack->log_file, "%d ", stack->data[i]);
         }
-        // printf("\nhash = %zu\n\n", stack->hash);
-        fprintf(stack->log_file, "\nhash = %zu\n\n", stack->hash);
+        fprintf(stack->log_file, "\nhash = %zu ", stack->hash);
+        fprintf(stack->log_file, "get_data_hash = %zu ", get_data_hash(stack));
+        fprintf(stack->log_file, "get_hash = %zu (%d)\n\n", get_hash(stack->data[stack->size]), stack->data[stack->size]);
     }
     else 
     {
-        // printf("\ndata = nullptr\n\n");
         fprintf(stack->log_file, "\ndata = nullptr\n\n");
     }
+
 }
-
-
 
 void stack_check(stack_t *stack)
 {
-    // stack_dump(stack, __FUNCTION__, __LINE__);
+    stack_dump(stack, __FUNCTION__, __LINE__);
 
-    assert(stack->data[0] == DETECTOR);
-    assert(stack->data[stack->size + 1] == DETECTOR);
-    assert(stack != nullptr);
-    assert(stack->data != nullptr); 
-    assert(stack->size >= 0);
-    assert(stack->size <= stack->capacity);
+    if(stack->data[0] != DETECTOR || stack->data[stack->size + 1] != DETECTOR)
+    {
+        stack->error = stack_is_side_damaged;
+    }
+
+    if(stack->size < 0 || stack->size > stack->capacity)
+    {
+        stack->error = stack_unreal_size;
+    }
+
+    if(stack->hash != get_data_hash(stack))
+    {
+        stack->error = stack_wrong_hash;
+    }
 }
 
-size_t get_data_hash(stack_t *stack) //ALARMALARMALARMALARMALARMALARMALARMALARMALARMALARMALARM а не будет быстрее просто складывать в 16 байтовое? 
+HASH_TYPE get_data_hash(stack_t *stack) 
 {
-    size_t hash = 0;
+    HASH_TYPE hash = 0;
 
     for(size_t i = 1; i < stack->size + 1; i++)
     {
@@ -125,9 +144,9 @@ size_t get_data_hash(stack_t *stack) //ALARMALARMALARMALARMALARMALARMALARMALARMA
     return hash;
 }
 
-size_t get_hash(HASH_TYPE num)
+HASH_TYPE get_hash(HASH_TYPE num)
 {
-    size_t hash = 0;
+    HASH_TYPE hash = 0;
 
     for(size_t i = 0; i < 8  * sizeof(HASH_TYPE); i++)
     {
@@ -155,7 +174,7 @@ void stack_del(stack_t *stack)
  * в начале и в конце даты канарейка и проверять не тронули ли их DETECTOR
  * в удалении заливать нелогичные значения
  * calloc вместо malloc
- * проверять размеры
+ * проверять всё
  * динамическое изменение размера
  * логи
  * удалять сам стэк и его дату
